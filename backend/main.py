@@ -59,6 +59,7 @@ async def live_data_fast(request: Request):
         "private_jets": d.get("private_jets", []),
         "tracked_flights": d.get("tracked_flights", []),
         "ships": d.get("ships", []),
+        "satellites": d.get("satellites", []),
         "cctv": d.get("cctv", []),
         "uavs": d.get("uavs", []),
         "liveuamap": d.get("liveuamap", []),
