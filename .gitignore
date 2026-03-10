@@ -68,6 +68,12 @@ TheAirTraffic Database.xlsx
 # Debug dumps & release artifacts
 backend/dump.json
 backend/debug_fast.json
+backend/nyc_sample.json
+backend/nyc_full.json
+backend/liveua_test.html
+backend/out_liveua.json
+frontend/server_logs*.txt
+frontend/cctv.db
 *.zip
 .git_backup/
 
