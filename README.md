@@ -30,7 +30,7 @@ Built with **Next.js**, **MapLibre GL**, **FastAPI**, and **Python**, it's desig
 * Nose around local emergency scanners
 * Watch naval traffic worldwide
 * Detect GPS jamming zones
-* Follow earthquakes and disasters in real time
+* Follow earthquakes and other natural disasters in real time
 
 ---
 
