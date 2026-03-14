@@ -35,7 +35,7 @@ A surprising amount of global telemetry is already public:
 
 This data is scattered across dozens of tools and APIs. ShadowBroker began as an experiment to see what the world looks like when these signals are combined into a single interface.
 
-The project does not introduce new surveillance capabilities — it visualizes existing public datasets. It is fully open-source so anyone can audit exactly what data is accessed and how. No data is collected, stored, or transmitted beyond what is needed to render the dashboard in your browser.
+The project does not introduce new surveillance capabilities — it aggregates and visualizes existing public datasets, including public aircraft registration records. It is fully open-source so anyone can audit exactly what data is accessed and how. No user data is collected or transmitted — the dashboard runs entirely in your browser against a self-hosted backend.
 
 ---
 
