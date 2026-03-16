@@ -2,9 +2,34 @@ import { describe, it, expect } from 'vitest';
 import {
     buildEarthquakesGeoJSON, buildJammingGeoJSON, buildCctvGeoJSON, buildKiwisdrGeoJSON,
     buildFirmsGeoJSON, buildInternetOutagesGeoJSON, buildDataCentersGeoJSON,
-    buildGdeltGeoJSON, buildLiveuaGeoJSON, buildFrontlineGeoJSON
+    buildGdeltGeoJSON, buildLiveuaGeoJSON, buildFrontlineGeoJSON, buildMilitaryBasesGeoJSON
 } from '@/components/map/geoJSONBuilders';
-import type { Earthquake, GPSJammingZone, FireHotspot, InternetOutage, DataCenter, GDELTIncident, LiveUAmapIncident, CCTVCamera, KiwiSDR } from '@/types/dashboard';
+import type { Earthquake, GPSJammingZone, FireHotspot, InternetOutage, DataCenter, GDELTIncident, LiveUAmapIncident, CCTVCamera, KiwiSDR, MilitaryBase } from '@/types/dashboard';
+
+// ─── Military Bases ────────────────────────────────────────────────────────
+
+describe('buildMilitaryBasesGeoJSON', () => {
+    it('returns null for empty/undefined input', () => {
+        expect(buildMilitaryBasesGeoJSON(undefined)).toBeNull();
+        expect(buildMilitaryBasesGeoJSON([])).toBeNull();
+    });
+
+    it('builds valid Feature for ASDF branch base', () => {
+        const bases: MilitaryBase[] = [
+            { name: 'Naha Air Base', country: 'Japan', operator: 'ASDF 9th Air Wing', branch: 'asdf', lat: 26.196, lng: 127.646 },
+        ];
+        const result = buildMilitaryBasesGeoJSON(bases);
+        expect(result).not.toBeNull();
+        expect(result!.type).toBe('FeatureCollection');
+        expect(result!.features).toHaveLength(1);
+
+        const f = result!.features[0];
+        expect(f.geometry).toEqual({ type: 'Point', coordinates: [127.646, 26.196] });
+        expect(f.properties?.type).toBe('military_base');
+        expect(f.properties?.branch).toBe('asdf');
+        expect(f.properties?.name).toBe('Naha Air Base');
+    });
+});
 
 // ─── Earthquakes ────────────────────────────────────────────────────────────
 

@@ -35,7 +35,7 @@ class TestMilitaryBasesData:
             assert -180 <= entry["lng"] <= 180, f"{entry['name']} has invalid lng"
 
     def test_branch_values_are_known(self):
-        known_branches = {"air_force", "navy", "marines", "army"}
+        known_branches = {"air_force", "navy", "marines", "army", "gsdf", "msdf", "asdf"}
         raw = json.loads(BASES_PATH.read_text(encoding="utf-8"))
         for entry in raw:
             assert entry["branch"] in known_branches, f"{entry['name']} has unknown branch: {entry['branch']}"
@@ -60,3 +60,19 @@ class TestFetchMilitaryBases:
         assert "Kadena Air Base" in names
         assert "Fleet Activities Yokosuka" in names
         assert "Andersen Air Force Base" in names
+
+    def test_includes_jsdf_bases(self):
+        from services.fetchers.infrastructure import fetch_military_bases
+        fetch_military_bases()
+        with _data_lock:
+            names = {b["name"] for b in latest_data["military_bases"]}
+        assert "Yonaguni Garrison" in names
+        assert "Naha Air Base" in names
+        assert "Kure Naval Base" in names
+
+    def test_colocated_bases_have_separate_entries(self):
+        from services.fetchers.infrastructure import fetch_military_bases
+        fetch_military_bases()
+        with _data_lock:
+            misawa_entries = [b for b in latest_data["military_bases"] if "Misawa" in b["name"]]
+        assert len(misawa_entries) == 2, f"Expected 2 Misawa entries, got {len(misawa_entries)}"
