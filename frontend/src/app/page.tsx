@@ -31,6 +31,9 @@ import { useReverseGeocode } from "@/hooks/useReverseGeocode";
 import { useRegionDossier } from "@/hooks/useRegionDossier";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useUpdateChecker } from "@/hooks/useUpdateChecker";
+import { useRecentEntities } from "@/hooks/useRecentEntities";
+import RecentEntitiesTray from "@/components/RecentEntitiesTray";
+import GlobalTensionIndicator from "@/components/GlobalTensionIndicator";
 
 // Use dynamic loads for Maplibre to avoid SSR window is not defined errors
 const MaplibreViewer = dynamic(() => import('@/components/MaplibreViewer'), { ssr: false });
@@ -135,6 +138,7 @@ export default function Dashboard() {
   const [selectedEntity, setSelectedEntity] = useState<SelectedEntity | null>(null);
   const [trackedSdr, setTrackedSdr] = useState<any>(null);
   const { regionDossier, regionDossierLoading, handleMapRightClick } = useRegionDossier(selectedEntity, setSelectedEntity);
+  const { entries: recentEntries, addEntity: addRecentEntity, clearEntries: clearRecentEntries } = useRecentEntities();
 
   const [uiVisible, setUiVisible] = useState(true);
   const [leftOpen, setLeftOpen] = useState(true);
@@ -281,6 +285,14 @@ export default function Dashboard() {
 
   useKeyboardShortcuts(kbHandlers(), anyModalOpen);
 
+  // Wrap entity selection to also record in recent entities
+  const handleEntityClick = useCallback((entity: SelectedEntity | null) => {
+    setSelectedEntity(entity);
+    if (entity) {
+      addRecentEntity(entity, data);
+    }
+  }, [addRecentEntity, data]);
+
   return (
     <DashboardDataProvider data={data} selectedEntity={selectedEntity} setSelectedEntity={setSelectedEntity}>
     <main className="fixed inset-0 w-full h-full bg-[var(--bg-primary)] overflow-hidden font-sans">
@@ -292,7 +304,7 @@ export default function Dashboard() {
           activeLayers={activeLayers}
           activeFilters={activeFilters}
           effects={{ ...effects, bloom: effects.bloom && activeStyle !== 'DEFAULT', style: activeStyle }}
-          onEntityClick={setSelectedEntity}
+          onEntityClick={handleEntityClick}
           selectedEntity={selectedEntity}
           flyToLocation={flyToLocation}
           gibsDate={gibsDate}
@@ -359,7 +371,7 @@ export default function Dashboard() {
           >
             {/* LEFT PANEL - DATA LAYERS */}
             <ErrorBoundary name="WorldviewLeftPanel">
-              <WorldviewLeftPanel data={data} activeLayers={activeLayers} setActiveLayers={setActiveLayers} onSettingsClick={() => setSettingsOpen(true)} onLegendClick={() => setLegendOpen(true)} gibsDate={gibsDate} setGibsDate={setGibsDate} gibsOpacity={gibsOpacity} setGibsOpacity={setGibsOpacity} onEntityClick={setSelectedEntity} onFlyTo={(lat, lng) => setFlyToLocation({ lat, lng, ts: Date.now() })} trackedSdr={trackedSdr} setTrackedSdr={setTrackedSdr} />
+              <WorldviewLeftPanel data={data} activeLayers={activeLayers} setActiveLayers={setActiveLayers} onSettingsClick={() => setSettingsOpen(true)} onLegendClick={() => setLegendOpen(true)} gibsDate={gibsDate} setGibsDate={setGibsDate} gibsOpacity={gibsOpacity} setGibsOpacity={setGibsOpacity} onEntityClick={handleEntityClick} onFlyTo={(lat, lng) => setFlyToLocation({ lat, lng, ts: Date.now() })} trackedSdr={trackedSdr} setTrackedSdr={setTrackedSdr} />
             </ErrorBoundary>
           </motion.div>
 
@@ -500,6 +512,12 @@ export default function Dashboard() {
               {/* Divider */}
               <div className="w-px h-8 bg-[var(--border-primary)]" />
 
+              {/* Global Tension Indicator */}
+              <GlobalTensionIndicator data={data} />
+
+              {/* Divider */}
+              <div className="w-px h-8 bg-[var(--border-primary)]" />
+
               {/* Space Weather */}
               <div className="flex flex-col items-center" title={`Kp Index: ${data?.space_weather?.kp_index ?? 'N/A'}`}>
                 <div className="text-[8px] text-[var(--text-muted)] font-mono tracking-[0.2em]">SOLAR</div>
@@ -513,6 +531,18 @@ export default function Dashboard() {
               </div>
             </div>
           </motion.div>}
+
+          {/* RECENT ENTITIES TRAY */}
+          <RecentEntitiesTray
+            entries={recentEntries}
+            onSelect={(entry) => {
+              setSelectedEntity({ id: entry.id, type: entry.type, name: entry.name, extra: entry.extra });
+              if (entry.lat != null && entry.lng != null) {
+                setFlyToLocation({ lat: entry.lat, lng: entry.lng, ts: Date.now() });
+              }
+            }}
+            onClear={clearRecentEntries}
+          />
         </>
       )}
 
