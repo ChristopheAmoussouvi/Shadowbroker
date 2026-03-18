@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Github, MessageSquare, Download, AlertCircle, CheckCircle2, RefreshCw, ExternalLink, X } from "lucide-react";
+import { Github, MessageSquare, Download, AlertCircle, CheckCircle2, RefreshCw, ExternalLink, X, Network } from "lucide-react";
 import { API_BASE } from "@/lib/api";
 import packageJson from "../../package.json";
 
@@ -16,7 +16,7 @@ type UpdateStatus =
     | "restarting"
     | "update_error";
 
-export default function TopRightControls() {
+export default function TopRightControls({ onEntityGraphClick }: { onEntityGraphClick?: () => void }) {
     const [updateStatus, setUpdateStatus] = useState<UpdateStatus>("idle");
     const [latestVersion, setLatestVersion] = useState<string>("");
     const [errorMessage, setErrorMessage] = useState("");
@@ -204,6 +204,17 @@ export default function TopRightControls() {
                 <MessageSquare size={12} className="text-cyan-400 w-3 h-3" />
                 <span className="tracking-widest">DISCUSSIONS</span>
             </a>
+
+            {/* 🕸️ Entity Graph button */}
+            {onEntityGraphClick && (
+                <button
+                    onClick={onEntityGraphClick}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[var(--bg-primary)]/50 backdrop-blur-md border border-[var(--border-primary)] rounded-lg hover:border-cyan-500/50 hover:bg-[var(--hover-accent)] transition-all text-[10px] text-[var(--text-secondary)] font-mono cursor-pointer"
+                >
+                    <Network size={12} className="text-cyan-400 w-3 h-3" />
+                    <span className="tracking-widest">ENTITY GRAPH</span>
+                </button>
+            )}
 
             {/* ── Update Available → opens confirmation ── */}
             {updateStatus === "available" && (
