@@ -16,6 +16,7 @@ import SettingsPanel from "@/components/SettingsPanel";
 import MapLegend from "@/components/MapLegend";
 import ScaleBar from "@/components/ScaleBar";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import EntityGraphPanel from "@/components/EntityGraphPanel";
 import { DashboardDataProvider } from "@/lib/DashboardDataContext";
 import OnboardingModal, { useOnboarding } from "@/components/OnboardingModal";
 import ChangelogModal, { useChangelog } from "@/components/ChangelogModal";
@@ -202,6 +203,9 @@ export default function Dashboard() {
   const { showOnboarding, setShowOnboarding } = useOnboarding();
   const { showChangelog, setShowChangelog } = useChangelog();
 
+  // Entity Graph panel
+  const [entityGraphOpen, setEntityGraphOpen] = useState(false);
+
   return (
     <DashboardDataProvider data={data} selectedEntity={selectedEntity} setSelectedEntity={setSelectedEntity}>
     <main className="fixed inset-0 w-full h-full bg-[var(--bg-primary)] overflow-hidden font-sans">
@@ -320,7 +324,7 @@ export default function Dashboard() {
             animate={{ x: rightOpen ? 0 : 360 }}
             transition={{ type: 'spring', damping: 30, stiffness: 250 }}
           >
-            <TopRightControls />
+            <TopRightControls onEntityGraphClick={() => setEntityGraphOpen(true)} />
 
             {/* FIND / LOCATE */}
             <div className="flex-shrink-0">
@@ -475,6 +479,15 @@ export default function Dashboard() {
       {/* SETTINGS PANEL */}
       <ErrorBoundary name="SettingsPanel">
         <SettingsPanel isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      </ErrorBoundary>
+
+      {/* ENTITY GRAPH PANEL */}
+      <ErrorBoundary name="EntityGraphPanel">
+        <EntityGraphPanel
+          isOpen={entityGraphOpen}
+          onClose={() => setEntityGraphOpen(false)}
+          onJumpToLocation={(lat, lng) => setFlyToLocation({ lat, lng, ts: Date.now() })}
+        />
       </ErrorBoundary>
 
       {/* MAP LEGEND */}

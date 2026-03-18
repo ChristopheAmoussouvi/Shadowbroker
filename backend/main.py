@@ -518,5 +518,42 @@ async def system_update(request: Request):
     threading.Timer(2.0, schedule_restart, args=[project_root]).start()
     return result
 
+# ---------------------------------------------------------------------------
+# Entity Relationship Graph
+# ---------------------------------------------------------------------------
+from services.entity_graph import build_graph, search_entities, get_all_entities, get_entity_info
+
+@app.get("/api/entity-graph")
+@limiter.limit("30/minute")
+async def entity_graph(request: Request):
+    """Build and return the full entity relationship graph using latest live data."""
+    live_data = get_latest_data()
+    return build_graph(live_data)
+
+
+@app.get("/api/entity-graph/search")
+@limiter.limit("60/minute")
+async def entity_graph_search(request: Request, q: str = Query("", max_length=200)):
+    """Full-text search across all known entities."""
+    return search_entities(q)
+
+
+@app.get("/api/entity-graph/all")
+@limiter.limit("60/minute")
+async def entity_graph_all(request: Request):
+    """Return all known entity entries for the UI catalogue."""
+    return get_all_entities()
+
+
+@app.get("/api/entity-graph/entity/{entity_id}")
+@limiter.limit("60/minute")
+async def entity_graph_entity(entity_id: str, request: Request):
+    """Return detailed info for a specific entity by ID."""
+    info = get_entity_info(entity_id)
+    if info is None:
+        raise HTTPException(status_code=404, detail=f"Entity '{entity_id}' not found")
+    return info
+
+
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
