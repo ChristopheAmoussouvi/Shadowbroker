@@ -391,7 +391,7 @@ export default function LLMSettingsPanel() {
                     <input
                         type="range"
                         min={512}
-                        max={4096}
+                        max={8192}
                         step={256}
                         value={localConfig.max_tokens}
                         onChange={(e) => update("max_tokens", parseInt(e.target.value, 10))}
@@ -399,7 +399,7 @@ export default function LLMSettingsPanel() {
                     />
                     <div className="flex justify-between text-[8px] font-mono text-[var(--text-muted)] mt-0.5">
                         <span>512</span>
-                        <span>4096</span>
+                        <span>8192</span>
                     </div>
                 </div>
 
