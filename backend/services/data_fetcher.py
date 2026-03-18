@@ -67,6 +67,12 @@ def update_fast_data():
     with _data_lock:
         latest_data['last_updated'] = datetime.utcnow().isoformat()
     logger.info("Fast-tier update complete.")
+    # Ingest new events into the timeline after fast data refresh
+    try:
+        from services.event_timeline import ingest_events
+        ingest_events(get_latest_data())
+    except Exception as exc:
+        logger.debug("Timeline ingest error (fast): %s", exc)
 
 def update_slow_data():
     """Slow-tier: contextual + enrichment data that refreshes less often (every 5–10 min)."""
@@ -91,6 +97,12 @@ def update_slow_data():
         futures = [executor.submit(func) for func in slow_funcs]
         concurrent.futures.wait(futures)
     logger.info("Slow-tier update complete.")
+    # Ingest new events into the timeline after slow data refresh
+    try:
+        from services.event_timeline import ingest_events
+        ingest_events(get_latest_data())
+    except Exception as exc:
+        logger.debug("Timeline ingest error (slow): %s", exc)
 
 def update_all_data():
     """Full refresh — all tiers run IN PARALLEL for fastest startup."""

@@ -38,7 +38,8 @@ for _var in _SECRET_VARS:
         except Exception as _e:
             logger.error(f"Failed to read secret file {_file_path} for {_var}: {_e}")
 
-from fastapi import FastAPI, Request, Response, Query, Depends, HTTPException
+from fastapi import FastAPI, Request, Response, Query, Depends, HTTPException, WebSocket, WebSocketDisconnect
+import asyncio
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from services.data_fetcher import start_scheduler, stop_scheduler, get_latest_data, source_timestamps
@@ -517,6 +518,105 @@ async def system_update(request: Request):
     # Schedule restart AFTER response flushes (2s delay)
     threading.Timer(2.0, schedule_restart, args=[project_root]).start()
     return result
+
+# ---------------------------------------------------------------------------
+# Event Timeline — REST + WebSocket
+# ---------------------------------------------------------------------------
+
+class TimelineConnectionManager:
+    """Manages active WebSocket connections for the live timeline feed."""
+
+    def __init__(self) -> None:
+        self._connections: list[WebSocket] = []
+        self._lock = threading.Lock()
+
+    def connect(self, ws: WebSocket) -> None:
+        with self._lock:
+            self._connections.append(ws)
+
+    def disconnect(self, ws: WebSocket) -> None:
+        with self._lock:
+            try:
+                self._connections.remove(ws)
+            except ValueError:
+                pass
+
+    async def broadcast(self, event: dict) -> None:
+        """Send a single event to all connected clients."""
+        with self._lock:
+            connections = list(self._connections)
+        dead: list[WebSocket] = []
+        for ws in connections:
+            try:
+                await ws.send_json(event)
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            self.disconnect(ws)
+
+
+_timeline_ws_manager = TimelineConnectionManager()
+_timeline_event_loop: asyncio.AbstractEventLoop | None = None
+
+
+def _timeline_broadcast_sync(event: dict) -> None:
+    """Bridge: called from sync ingest_events; dispatches to the async event loop."""
+    loop = _timeline_event_loop
+    if loop is not None and loop.is_running():
+        asyncio.run_coroutine_threadsafe(
+            _timeline_ws_manager.broadcast(event), loop
+        )
+
+
+# Register broadcast callback once main.py is fully loaded
+from services.event_timeline import (
+    register_broadcast_callback,
+    get_recent_events as _get_recent_events,
+    get_event_stats as _get_event_stats,
+)
+register_broadcast_callback(_timeline_broadcast_sync)
+
+
+@app.on_event("startup")
+async def _capture_event_loop() -> None:
+    global _timeline_event_loop
+    _timeline_event_loop = asyncio.get_running_loop()
+
+
+@app.get("/api/timeline")
+@limiter.limit("60/minute")
+async def get_timeline(
+    request: Request,
+    limit: int = Query(100, ge=1, le=500),
+    layer: str = Query(None),
+    severity: str = Query(None),
+):
+    return _get_recent_events(limit=limit, layer=layer, severity=severity)
+
+
+@app.get("/api/timeline/stats")
+@limiter.limit("30/minute")
+async def get_timeline_stats(request: Request):
+    return _get_event_stats()
+
+
+@app.websocket("/ws/timeline")
+async def websocket_timeline(websocket: WebSocket):
+    await websocket.accept()
+    _timeline_ws_manager.connect(websocket)
+    try:
+        while True:
+            # Keep-alive ping every 30 seconds; also allows us to detect disconnects
+            await asyncio.sleep(30)
+            try:
+                await websocket.send_json({"type": "ping"})
+            except Exception:
+                break
+    except WebSocketDisconnect:
+        pass
+    finally:
+        _timeline_ws_manager.disconnect(websocket)
+
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
