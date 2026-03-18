@@ -13,6 +13,7 @@ import FindLocateBar from "@/components/FindLocateBar";
 import TopRightControls from "@/components/TopRightControls";
 import RadioInterceptPanel from "@/components/RadioInterceptPanel";
 import SettingsPanel from "@/components/SettingsPanel";
+import SitrepPanel from "@/components/SitrepPanel";
 import MapLegend from "@/components/MapLegend";
 import ScaleBar from "@/components/ScaleBar";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -133,6 +134,7 @@ export default function Dashboard() {
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [sitrepOpen, setSitrepOpen] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
   const [mapView, setMapView] = useState({ zoom: 2, latitude: 20 });
   const [measureMode, setMeasureMode] = useState(false);
@@ -320,7 +322,7 @@ export default function Dashboard() {
             animate={{ x: rightOpen ? 0 : 360 }}
             transition={{ type: 'spring', damping: 30, stiffness: 250 }}
           >
-            <TopRightControls />
+            <TopRightControls onSitrepToggle={() => setSitrepOpen(true)} />
 
             {/* FIND / LOCATE */}
             <div className="flex-shrink-0">
@@ -475,6 +477,15 @@ export default function Dashboard() {
       {/* SETTINGS PANEL */}
       <ErrorBoundary name="SettingsPanel">
         <SettingsPanel isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      </ErrorBoundary>
+
+      {/* AI SITREP PANEL */}
+      <ErrorBoundary name="SitrepPanel">
+        <SitrepPanel
+          isOpen={sitrepOpen}
+          onClose={() => setSitrepOpen(false)}
+          onOpenSettings={() => { setSitrepOpen(false); setSettingsOpen(true); }}
+        />
       </ErrorBoundary>
 
       {/* MAP LEGEND */}

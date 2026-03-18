@@ -19,6 +19,8 @@ _SECRET_VARS = [
     "LTA_ACCOUNT_KEY",
     "CORS_ORIGINS",
     "ADMIN_KEY",
+    "OPENROUTER_API_KEY",
+    "GEMINI_API_KEY",
 ]
 
 for _var in _SECRET_VARS:
@@ -517,6 +519,115 @@ async def system_update(request: Request):
     # Schedule restart AFTER response flushes (2s delay)
     threading.Timer(2.0, schedule_restart, args=[project_root]).start()
     return result
+
+# ---------------------------------------------------------------------------
+# AI SITREP — LLM-powered situation reports
+# ---------------------------------------------------------------------------
+from services.llm_config import (
+    get_llm_config,
+    update_llm_config,
+    get_available_models,
+    get_llm_config_raw,
+)
+from services.sitrep_generator import (
+    generate_sitrep,
+    get_sitrep_history,
+    get_sitrep_by_id,
+    test_llm_connection,
+)
+
+class LLMConfigUpdate(BaseModel):
+    provider: str | None = None
+    openrouter_api_key: str | None = None
+    openrouter_model: str | None = None
+    gemini_api_key: str | None = None
+    gemini_model: str | None = None
+    system_prompt: str | None = None
+    temperature: float | None = None
+    max_tokens: int | None = None
+    sitrep_auto_interval_minutes: int | None = None
+    sitrep_focus_layers: list[str] | None = None
+
+
+@app.get("/api/sitrep/config", dependencies=[Depends(require_admin)])
+@limiter.limit("30/minute")
+async def sitrep_get_config(request: Request):
+    """Return current LLM config with API keys masked."""
+    return get_llm_config()
+
+
+@app.put("/api/sitrep/config", dependencies=[Depends(require_admin)])
+@limiter.limit("10/minute")
+async def sitrep_update_config(request: Request, body: LLMConfigUpdate):
+    """Update LLM configuration (API keys, model, prompt, etc.)."""
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    return update_llm_config(updates)
+
+
+@app.get("/api/sitrep/models")
+@limiter.limit("30/minute")
+async def sitrep_get_models(request: Request):
+    """Return the static list of available models per provider."""
+    return get_available_models()
+
+
+@app.get("/api/sitrep/history")
+@limiter.limit("30/minute")
+async def sitrep_get_history(
+    request: Request,
+    limit: int = Query(10, ge=1, le=20),
+):
+    """Return the last N generated SITREPs."""
+    return get_sitrep_history(limit=limit)
+
+
+@app.get("/api/sitrep/history/{sitrep_id}")
+@limiter.limit("30/minute")
+async def sitrep_get_one(request: Request, sitrep_id: str):
+    """Return a specific SITREP by ID."""
+    item = get_sitrep_by_id(sitrep_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="SITREP not found")
+    return item
+
+
+@app.post("/api/sitrep/generate", dependencies=[Depends(require_admin)])
+@limiter.limit("2/minute")
+async def sitrep_generate(request: Request):
+    """
+    Generate a new AI SITREP using the current live data and configured LLM.
+    Rate-limited to 2/minute (LLM calls are expensive).
+    """
+    config = get_llm_config_raw()
+    live_data = get_latest_data()
+    try:
+        result = await generate_sitrep(live_data, config)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"SITREP generation failed: {e}")
+        raise HTTPException(status_code=502, detail=f"LLM call failed: {e}")
+    return result
+
+
+@app.post("/api/sitrep/config/test", dependencies=[Depends(require_admin)])
+@limiter.limit("10/minute")
+async def sitrep_test_connection(request: Request):
+    """Test LLM API key connectivity. Returns latency + success/error."""
+    # Accept optional partial config in request body to test before saving
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if body:
+        # Merge with stored config so the test uses real keys for fields not supplied
+        stored = get_llm_config_raw()
+        stored.update({k: v for k, v in body.items() if v is not None and not (isinstance(v, str) and v.endswith("..."))})
+        config = stored
+    else:
+        config = get_llm_config_raw()
+    return await test_llm_connection(config)
+
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

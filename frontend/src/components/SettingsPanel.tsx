@@ -3,7 +3,8 @@
 import { API_BASE } from "@/lib/api";
 import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Settings, ExternalLink, Key, Shield, X, Save, ChevronDown, ChevronUp, Rss, Plus, Trash2, RotateCcw } from "lucide-react";
+import { Settings, ExternalLink, Key, Shield, X, Save, ChevronDown, ChevronUp, Rss, Plus, Trash2, RotateCcw, Bot } from "lucide-react";
+import LLMSettingsPanel from "@/components/LLMSettingsPanel";
 
 interface ApiEntry {
     id: string;
@@ -47,7 +48,7 @@ const CATEGORY_COLORS: Record<string, string> = {
     SIGINT: "text-rose-400 border-rose-500/30 bg-rose-950/20",
 };
 
-type Tab = "api-keys" | "news-feeds";
+type Tab = "api-keys" | "news-feeds" | "ai-sitrep";
 
 const SettingsPanel = React.memo(function SettingsPanel({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
     const [activeTab, setActiveTab] = useState<Tab>("api-keys");
@@ -269,7 +270,21 @@ const SettingsPanel = React.memo(function SettingsPanel({ isOpen, onClose }: { i
                                 NEWS FEEDS
                                 {feedsDirty && <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-pulse" />}
                             </button>
+                            <button
+                                onClick={() => setActiveTab("ai-sitrep")}
+                                className={`flex-1 px-4 py-2.5 text-[10px] font-mono tracking-widest font-bold transition-colors flex items-center justify-center gap-1.5 ${activeTab === "ai-sitrep" ? "text-cyan-400 border-b-2 border-cyan-500 bg-cyan-950/10" : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"}`}
+                            >
+                                <Bot size={10} />
+                                AI / SITREP
+                            </button>
                         </div>
+
+                        {/* ==================== AI SITREP TAB ==================== */}
+                        {activeTab === "ai-sitrep" && (
+                            <div className="flex-1 overflow-y-auto styled-scrollbar">
+                                <LLMSettingsPanel />
+                            </div>
+                        )}
 
                         {/* ==================== API KEYS TAB ==================== */}
                         {activeTab === "api-keys" && (
