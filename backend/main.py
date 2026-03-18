@@ -144,7 +144,7 @@ async def lifespan(app: FastAPI):
 
     # Register the WebSocket broadcast function and event loop with alert_manager
     from services import alert_manager
-    alert_manager.set_broadcast(alert_manager_ws.broadcast, asyncio.get_event_loop())
+    alert_manager.set_broadcast(alert_manager_ws.broadcast, asyncio.get_running_loop())
 
     # Start AIS stream first — it loads the disk cache (instant ships) then
     # begins accumulating live vessel data via WebSocket in the background.
