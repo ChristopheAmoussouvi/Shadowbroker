@@ -68,6 +68,13 @@ def update_fast_data():
         latest_data['last_updated'] = datetime.utcnow().isoformat()
     logger.info("Fast-tier update complete.")
 
+    # Evaluate alert rules against fresh data (non-blocking — runs in this thread)
+    try:
+        from services.alert_manager import evaluate_alerts
+        evaluate_alerts(get_latest_data())
+    except Exception as exc:
+        logger.debug("Alert evaluation error: %s", exc)
+
 def update_slow_data():
     """Slow-tier: contextual + enrichment data that refreshes less often (every 5–10 min)."""
     logger.info("Slow-tier data update starting...")

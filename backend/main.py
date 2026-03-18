@@ -19,6 +19,8 @@ _SECRET_VARS = [
     "LTA_ACCOUNT_KEY",
     "CORS_ORIGINS",
     "ADMIN_KEY",
+    "TELEGRAM_BOT_TOKEN",
+    "DISCORD_WEBHOOK_URL",
 ]
 
 for _var in _SECRET_VARS:
@@ -38,7 +40,7 @@ for _var in _SECRET_VARS:
         except Exception as _e:
             logger.error(f"Failed to read secret file {_file_path} for {_var}: {_e}")
 
-from fastapi import FastAPI, Request, Response, Query, Depends, HTTPException
+from fastapi import FastAPI, Request, Response, Query, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from services.data_fetcher import start_scheduler, stop_scheduler, get_latest_data, source_timestamps
@@ -49,12 +51,47 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from services.schemas import HealthResponse, RefreshResponse
 import uvicorn
+import asyncio
 import hashlib
 import json as json_mod
 import socket
 import threading
 
 limiter = Limiter(key_func=get_remote_address)
+
+# ---------------------------------------------------------------------------
+# WebSocket connection manager — streams alert events to browser clients
+# ---------------------------------------------------------------------------
+
+class AlertConnectionManager:
+    """Manages active WebSocket connections for the alert stream."""
+
+    def __init__(self) -> None:
+        self.active_connections: list[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket) -> None:
+        """Accept and register a new WebSocket connection."""
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket) -> None:
+        """Remove a closed WebSocket connection."""
+        try:
+            self.active_connections.remove(websocket)
+        except ValueError:
+            pass
+
+    async def broadcast(self, message: dict) -> None:
+        """Send a JSON-serialised message to all connected clients."""
+        text = json_mod.dumps(message)
+        for connection in list(self.active_connections):
+            try:
+                await connection.send_text(text)
+            except Exception:
+                self.disconnect(connection)
+
+
+alert_manager_ws = AlertConnectionManager()
 
 # ---------------------------------------------------------------------------
 # Admin authentication — protects settings & system endpoints
@@ -104,6 +141,10 @@ async def lifespan(app: FastAPI):
     # Validate environment variables before starting anything
     from services.env_check import validate_env
     validate_env(strict=True)
+
+    # Register the WebSocket broadcast function and event loop with alert_manager
+    from services import alert_manager
+    alert_manager.set_broadcast(alert_manager_ws.broadcast, asyncio.get_event_loop())
 
     # Start AIS stream first — it loads the disk cache (instant ships) then
     # begins accumulating live vessel data via WebSocket in the background.
@@ -161,6 +202,9 @@ async def force_refresh(request: Request):
     def _do_refresh():
         try:
             update_all_data()
+            # Evaluate alerts after each full refresh
+            from services.alert_manager import evaluate_alerts
+            evaluate_alerts(get_latest_data())
         finally:
             _refresh_lock.release()
     t = threading.Thread(target=_do_refresh)
@@ -517,6 +561,107 @@ async def system_update(request: Request):
     # Schedule restart AFTER response flushes (2s delay)
     threading.Timer(2.0, schedule_restart, args=[project_root]).start()
     return result
+
+# ---------------------------------------------------------------------------
+# Alert WebSocket — real-time push stream for fired alert events
+# ---------------------------------------------------------------------------
+
+@app.websocket("/ws/alerts")
+async def websocket_alerts(websocket: WebSocket):
+    """WebSocket endpoint that streams alert events to browser clients.
+
+    Sends a keep-alive ping every 30 seconds to prevent idle timeouts.
+    """
+    await alert_manager_ws.connect(websocket)
+    try:
+        while True:
+            await asyncio.sleep(30)
+            await websocket.send_text('{"type":"ping"}')
+    except WebSocketDisconnect:
+        alert_manager_ws.disconnect(websocket)
+    except Exception:
+        alert_manager_ws.disconnect(websocket)
+
+# ---------------------------------------------------------------------------
+# Alert Rules REST API — CRUD for managing watchlist rules
+# ---------------------------------------------------------------------------
+from services.alert_manager import (
+    get_rules, add_rule, update_rule, delete_rule,
+    get_recent_alerts, evaluate_alerts,
+)
+
+@app.get("/api/alerts/rules")
+@limiter.limit("30/minute")
+async def api_get_alert_rules(request: Request):
+    """List all alert rules."""
+    return get_rules()
+
+@app.post("/api/alerts/rules")
+@limiter.limit("10/minute")
+async def api_create_alert_rule(request: Request):
+    """Create a new alert rule."""
+    body = await request.json()
+    rule = add_rule(body)
+    return rule
+
+@app.put("/api/alerts/rules/{rule_id}")
+@limiter.limit("10/minute")
+async def api_update_alert_rule(request: Request, rule_id: str):
+    """Update an existing alert rule by ID."""
+    body = await request.json()
+    updated = update_rule(rule_id, body)
+    if updated is None:
+        return Response(
+            content=json_mod.dumps({"error": "Rule not found"}),
+            status_code=404,
+            media_type="application/json",
+        )
+    return updated
+
+@app.delete("/api/alerts/rules/{rule_id}")
+@limiter.limit("10/minute")
+async def api_delete_alert_rule(request: Request, rule_id: str):
+    """Delete an alert rule by ID."""
+    deleted = delete_rule(rule_id)
+    if not deleted:
+        return Response(
+            content=json_mod.dumps({"error": "Rule not found"}),
+            status_code=404,
+            media_type="application/json",
+        )
+    return {"status": "deleted", "id": rule_id}
+
+@app.get("/api/alerts/recent")
+@limiter.limit("30/minute")
+async def api_get_recent_alerts(request: Request):
+    """Return the 50 most recent fired alert events."""
+    return get_recent_alerts(limit=50)
+
+@app.post("/api/alerts/test/{rule_id}")
+@limiter.limit("10/minute")
+async def api_test_alert_rule(request: Request, rule_id: str):
+    """Manually trigger a test notification for a rule (ignores cooldown)."""
+    rules = get_rules()
+    rule = next((r for r in rules if r["id"] == rule_id), None)
+    if rule is None:
+        return Response(
+            content=json_mod.dumps({"error": "Rule not found"}),
+            status_code=404,
+            media_type="application/json",
+        )
+    test_event = {
+        "type": "alert",
+        "rule_id": rule["id"],
+        "rule_name": rule["name"],
+        "rule_type": rule.get("type", "entity"),
+        "layer": "test",
+        "entity_label": "Test notification",
+        "entity": {},
+        "timestamp": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
+    }
+    # Push via WebSocket
+    await alert_manager_ws.broadcast(test_event)
+    return {"status": "test_sent", "rule_id": rule_id}
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

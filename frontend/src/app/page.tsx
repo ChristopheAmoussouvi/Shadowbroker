@@ -11,6 +11,7 @@ import MarketsPanel from "@/components/MarketsPanel";
 import FilterPanel from "@/components/FilterPanel";
 import FindLocateBar from "@/components/FindLocateBar";
 import TopRightControls from "@/components/TopRightControls";
+import AlertPanel from "@/components/AlertPanel";
 import RadioInterceptPanel from "@/components/RadioInterceptPanel";
 import SettingsPanel from "@/components/SettingsPanel";
 import MapLegend from "@/components/MapLegend";
@@ -321,6 +322,7 @@ export default function Dashboard() {
             transition={{ type: 'spring', damping: 30, stiffness: 250 }}
           >
             <TopRightControls />
+            <AlertPanel />
 
             {/* FIND / LOCATE */}
             <div className="flex-shrink-0">
