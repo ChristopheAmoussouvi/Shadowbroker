@@ -149,7 +149,10 @@ export function useTimeline(options?: UseTimelineOptions) {
   // ---------------------------------------------------------------------------
   useEffect(() => {
     mountedRef.current = true;
-    // Initial data fetch
+    // Initial data fetch and WebSocket setup — run only once on mount.
+    // fetchEvents and connectWs are stable (useCallback with no deps or
+    // deps that don't change after mount), so it's intentionally safe to
+    // omit them from the dependency array here.
     fetchEvents();
     // WebSocket connection
     connectWs();
@@ -162,7 +165,8 @@ export function useTimeline(options?: UseTimelineOptions) {
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Re-fetch when filters change
+  // Re-fetch when filters change — fetchEvents reads the latest filter values
+  // via its own useCallback deps, so we only need to trigger on filter changes.
   useEffect(() => {
     if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     fetchEvents();

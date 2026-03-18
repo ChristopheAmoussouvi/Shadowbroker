@@ -289,7 +289,7 @@ def _ingest_space_weather(sw_data: Any) -> None:
         if kp < 5.0:
             _prev_kp_index = kp
             return
-        if _prev_kp_index is not None and _prev_kp_index == kp:
+        if _prev_kp_index is not None and abs(_prev_kp_index - kp) < 0.01:
             return
         _prev_kp_index = kp
         entity_id = f"kp_{kp:.1f}"
