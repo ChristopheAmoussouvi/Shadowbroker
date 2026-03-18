@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import dynamic from 'next/dynamic';
 import { motion } from "framer-motion";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -17,7 +17,11 @@ import MapLegend from "@/components/MapLegend";
 import ScaleBar from "@/components/ScaleBar";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import EntityGraphPanel from "@/components/EntityGraphPanel";
+import IconDock from "@/components/IconDock";
+import KeyboardShortcutsModal from "@/components/KeyboardShortcutsModal";
+import ToastContainer from "@/components/ToastContainer";
 import { DashboardDataProvider } from "@/lib/DashboardDataContext";
+import { pushToast } from "@/lib/toast";
 import OnboardingModal, { useOnboarding } from "@/components/OnboardingModal";
 import ChangelogModal, { useChangelog } from "@/components/ChangelogModal";
 import type { SelectedEntity } from "@/types/dashboard";
@@ -25,6 +29,8 @@ import { NOMINATIM_DEBOUNCE_MS } from "@/lib/constants";
 import { useDataPolling } from "@/hooks/useDataPolling";
 import { useReverseGeocode } from "@/hooks/useReverseGeocode";
 import { useRegionDossier } from "@/hooks/useRegionDossier";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import { useUpdateChecker } from "@/hooks/useUpdateChecker";
 
 // Use dynamic loads for Maplibre to avoid SSR window is not defined errors
 const MaplibreViewer = dynamic(() => import('@/components/MaplibreViewer'), { ssr: false });
@@ -206,6 +212,75 @@ export default function Dashboard() {
   // Entity Graph panel
   const [entityGraphOpen, setEntityGraphOpen] = useState(false);
 
+  // Update availability (communicated from TopRightControls)
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+
+  // Keyboard shortcuts modal
+  const [showShortcuts, setShowShortcuts] = useState(false);
+
+  // Update checker (for IconDock button)
+  const updateChecker = useUpdateChecker((available) => {
+    setUpdateAvailable(available);
+    if (available) {
+      pushToast({
+        type: "success",
+        title: "UPDATE AVAILABLE",
+        body: "A new version is available. Click the dock update button.",
+        duration: 8000,
+      });
+    }
+  });
+
+  // Ref to focus the FindLocateBar search input via keyboard shortcut
+  const searchFocusRef = useRef<(() => void) | null>(null);
+
+  // Push a toast when the backend goes offline
+  const backendToastRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (backendStatus === "disconnected" && !backendToastRef.current) {
+      backendToastRef.current = pushToast({
+        type: "error",
+        title: "BACKEND OFFLINE",
+        body: "Cannot reach backend. Check container status.",
+        duration: 0,
+      });
+    } else if (backendStatus !== "disconnected" && backendToastRef.current) {
+      backendToastRef.current = null;
+    }
+  }, [backendStatus]);
+
+  // Keyboard shortcut handlers
+  const anyModalOpen =
+    showShortcuts ||
+    settingsOpen ||
+    legendOpen ||
+    entityGraphOpen ||
+    showOnboarding ||
+    showChangelog;
+
+  const kbHandlers = useCallback(() => ({
+    onToggleHUD: () => setUiVisible((v) => !v),
+    onFocusSearch: () => searchFocusRef.current?.(),
+    onForceRefresh: () => window.location.reload(),
+    onToggleLeftPanel: () => setLeftOpen((v) => !v),
+    onToggleMeasure: () => {
+      setMeasureMode((m) => !m);
+      setMeasurePoints([]);
+    },
+    onEscape: () => {
+      setSettingsOpen(false);
+      setLegendOpen(false);
+      setEntityGraphOpen(false);
+      setShowShortcuts(false);
+    },
+    onToggleSettings: () => setSettingsOpen((v) => !v),
+    onToggleLegend: () => setLegendOpen((v) => !v),
+    onToggleEntityGraph: () => setEntityGraphOpen((v) => !v),
+    onShowShortcuts: () => setShowShortcuts((v) => !v),
+  }), []);
+
+  useKeyboardShortcuts(kbHandlers(), anyModalOpen);
+
   return (
     <DashboardDataProvider data={data} selectedEntity={selectedEntity} setSelectedEntity={setSelectedEntity}>
     <main className="fixed inset-0 w-full h-full bg-[var(--bg-primary)] overflow-hidden font-sans">
@@ -324,7 +399,7 @@ export default function Dashboard() {
             animate={{ x: rightOpen ? 0 : 360 }}
             transition={{ type: 'spring', damping: 30, stiffness: 250 }}
           >
-            <TopRightControls onEntityGraphClick={() => setEntityGraphOpen(true)} />
+            <TopRightControls onUpdateStatusChange={setUpdateAvailable} />
 
             {/* FIND / LOCATE */}
             <div className="flex-shrink-0">
@@ -441,15 +516,30 @@ export default function Dashboard() {
         </>
       )}
 
-      {/* RESTORE UI BUTTON (If Hidden) */}
-      {!uiVisible && (
-        <button
-          onClick={() => setUiVisible(true)}
-          className="absolute bottom-6 right-6 z-[200] bg-[var(--bg-primary)]/60 backdrop-blur-md border border-[var(--border-primary)] rounded px-4 py-2 text-[10px] font-mono tracking-widest text-cyan-500 hover:text-cyan-300 hover:border-cyan-800 transition-colors pointer-events-auto"
-        >
-          RESTORE UI
-        </button>
-      )}
+      {/* RESTORE UI BUTTON (If Hidden) — hidden since IconDock handles this */}
+
+      {/* ICON DOCK — fixed right edge, always visible (survives HUD hide) */}
+      <IconDock
+        onEntityGraphClick={() => setEntityGraphOpen(true)}
+        onSettingsClick={() => setSettingsOpen((v) => !v)}
+        onLegendClick={() => setLegendOpen((v) => !v)}
+        onHideUI={() => setUiVisible(false)}
+        updateAvailable={updateAvailable}
+        updateStatus={updateChecker.updateStatus}
+        onUpdateClick={() => {
+          if (updateChecker.updateStatus === "idle" ||
+              updateChecker.updateStatus === "uptodate" ||
+              updateChecker.updateStatus === "error") {
+            updateChecker.checkForUpdates();
+          } else if (updateChecker.updateStatus === "available") {
+            updateChecker.setUpdateStatus("confirming");
+          }
+        }}
+        onShowShortcuts={() => setShowShortcuts((v) => !v)}
+        entityGraphOpen={entityGraphOpen}
+        settingsOpen={settingsOpen}
+        legendOpen={legendOpen}
+      />
 
       {/* DYNAMIC SCALE BAR */}
       <div className="absolute bottom-[5.5rem] left-[26rem] z-[201] pointer-events-auto">
@@ -516,6 +606,15 @@ export default function Dashboard() {
           </span>
         </div>
       )}
+
+      {/* KEYBOARD SHORTCUTS MODAL */}
+      <KeyboardShortcutsModal
+        isOpen={showShortcuts}
+        onClose={() => setShowShortcuts(false)}
+      />
+
+      {/* TOAST NOTIFICATION CONTAINER */}
+      <ToastContainer />
 
     </main>
     </DashboardDataProvider>
