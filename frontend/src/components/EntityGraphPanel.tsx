@@ -353,7 +353,7 @@ export default function EntityGraphPanel({ isOpen, onClose, onJumpToLocation }: 
         const dx = mx - n.x;
         const dy = my - n.y;
         if (Math.sqrt(dx * dx + dy * dy) <= n.radius + 4) {
-          if (n.active && n.lat != null && n.lng != null) {
+          if (n.active && n.lat !== null && n.lat !== undefined && n.lng !== null && n.lng !== undefined) {
             onJumpToLocation(n.lat, n.lng);
           }
           return;
@@ -663,9 +663,9 @@ function NodeDetailPanel({ node, entry, onJumpToLocation }: NodeDetailProps) {
         <div className="flex items-center gap-1.5 text-[9px] font-mono text-green-400">
           <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
           CURRENTLY ACTIVE
-          {node.lat != null && node.lng != null && onJumpToLocation && (
+          {node.lat !== null && node.lat !== undefined && node.lng !== null && node.lng !== undefined && onJumpToLocation && (
             <button
-              onClick={() => onJumpToLocation(node.lat!, node.lng!)}
+              onClick={() => onJumpToLocation(node.lat as number, node.lng as number)}
               className="ml-auto px-2 py-0.5 bg-cyan-500/10 border border-cyan-500/30 rounded text-[8px] text-cyan-400 hover:bg-cyan-500/20 transition-colors"
             >
               JUMP TO MAP
